@@ -60,18 +60,17 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: '20'
+          cache: 'npm'
+
+      - name: Install release tooling
+        run: npm ci
 
       - name: Compute next version (semantic-release dry-run)
         id: semver
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUT=$(npx --yes \
-            -p semantic-release@24 \
-            -p @semantic-release/commit-analyzer \
-            -p @semantic-release/release-notes-generator \
-            -p @semantic-release/github \
-            semantic-release --dry-run 2>&1 || true)
+          OUT=$(npx semantic-release --dry-run 2>&1 || true)
           echo "$OUT"
           NEXT=$(printf '%s\n' "$OUT" \
             | grep -oiE 'next release version is [0-9]+\.[0-9]+\.[0-9]+' \

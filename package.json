@@ -1,0 +1,19 @@
+{
+  "name": "semantic-versioning-release-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Release tooling (semantic-release) for the hello-world Gradle app",
+  "engines": {
+    "node": ">=20.8.1"
+  },
+  "scripts": {
+    "release": "semantic-release",
+    "release:dry": "semantic-release --dry-run --no-ci"
+  },
+  "devDependencies": {
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "@semantic-release/release-notes-generator": "^14.1.1",
+    "semantic-release": "^24.2.9"
+  }
+}

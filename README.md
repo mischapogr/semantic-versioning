@@ -27,6 +27,8 @@ conventional commits ──► semantic-release ──► vX.Y.Z tag / GitHub Re
 ├── src/test/java/.../AppTest.java
 ├── Dockerfile                   # multi-stage build -> temurin JRE runtime
 ├── .releaserc.json              # semantic-release config (conventional commits)
+├── package.json / package-lock.json  # pinned semantic-release tooling
+├── docs/local-usage.md          # running semantic-release locally
 └── .github/workflows/
     ├── release.yml              # Semantic Versioning (push to main/master)
     └── ci.yml                   # build + Docker push (PR test / release)
@@ -73,13 +75,12 @@ git commit -m "fix: correct version formatting"  # -> 1.0.1
 ```
 
 Preview the next version locally (dry-run, publishes nothing) — see
-[docs/local-usage.md](docs/local-usage.md) for Linux Mint install steps and the
-full command:
+[docs/local-usage.md](docs/local-usage.md) for Linux Mint install steps. The
+release tooling is pinned in `package.json` / `package-lock.json`:
 
 ```bash
-npx --yes -p semantic-release@24 \
-  -p @semantic-release/commit-analyzer -p @semantic-release/release-notes-generator \
-  semantic-release --dry-run --no-ci \
+npm ci
+npx semantic-release --dry-run --no-ci \
   --branches "$(git branch --show-current)" \
   --plugins @semantic-release/commit-analyzer @semantic-release/release-notes-generator
 ```

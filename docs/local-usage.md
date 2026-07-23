@@ -4,6 +4,9 @@
 mode** to preview the next version and release notes before pushing. This never
 publishes anything as long as you keep `--dry-run`.
 
+The release tooling is pinned in `package.json` / `package-lock.json`, so local
+runs use the exact same versions as CI.
+
 ## 1. Install Node.js (npx ships with npm)
 
 `semantic-release@24` requires **Node.js >= 20.8.1**. Linux Mint's default
@@ -35,20 +38,25 @@ sudo apt update && sudo apt install -y nodejs npm
 node -v      # must be >= 20.8.1, otherwise use Option A or B
 ```
 
-You do **not** install semantic-release itself — `npx --yes` fetches it on
-demand (matching the CI workflows).
+## 2. Install the pinned tooling
 
-## 2. Preview the next version — no token needed
-
-This mirrors the CI dry-run but loads only the analysis plugins, so it needs no
-GitHub token. Run it on a release branch (`main`/`master`):
+From the repo root, install the exact versions from the lockfile:
 
 ```bash
-npx --yes \
-  -p semantic-release@24 \
-  -p @semantic-release/commit-analyzer \
-  -p @semantic-release/release-notes-generator \
-  semantic-release --dry-run --no-ci \
+npm ci
+```
+
+`npm ci` installs `semantic-release` and the plugins into `node_modules/`
+(git-ignored) using `package-lock.json`, matching CI byte-for-byte. Re-run it
+only when the lockfile changes.
+
+## 3. Preview the next version — no token needed
+
+This loads only the analysis plugins, so it needs no GitHub token. Run it on a
+release branch (`main`/`master`):
+
+```bash
+npx semantic-release --dry-run --no-ci \
   --branches "$(git branch --show-current)" \
   --plugins @semantic-release/commit-analyzer @semantic-release/release-notes-generator
 ```
@@ -73,7 +81,7 @@ git commit --allow-empty -m "feat: demo change"
 - `--plugins …` — overrides `.releaserc.json` so the GitHub plugin (which needs
   a token) is skipped for a pure version preview.
 
-## 3. Full dry-run against the real config — token required
+## 4. Full dry-run against the real config — token required
 
 The project's `.releaserc.json` includes `@semantic-release/github`, whose
 `verifyConditions` step authenticates with GitHub. Without a token this fails:
@@ -87,16 +95,13 @@ GitHub Personal Access Token with `repo` scope first:
 
 ```bash
 export GITHUB_TOKEN=ghp_your_pat_here      # or GH_TOKEN
-npx --yes \
-  -p semantic-release@24 \
-  -p @semantic-release/commit-analyzer \
-  -p @semantic-release/release-notes-generator \
-  -p @semantic-release/github \
-  semantic-release --dry-run --no-ci
+npx semantic-release --dry-run --no-ci
+# convenience script equivalent: npm run release:dry
 ```
 
 ## ⚠️ Do not run a real release locally
 
-Dropping `--dry-run` makes semantic-release create the Git tag, push it, and cut
-a GitHub Release. Leave real releases to the `release.yml` workflow (triggered by
-pushes to `main`/`master`); only ever use `--dry-run` on your machine.
+Dropping `--dry-run` (or running `npm run release`) makes semantic-release create
+the Git tag, push it, and cut a GitHub Release. Leave real releases to the
+`release.yml` workflow (triggered by pushes to `main`/`master`); only ever use
+`--dry-run` on your machine.
