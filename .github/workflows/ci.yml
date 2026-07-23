@@ -1,12 +1,17 @@
 # CI workflow.
 #
-#   * build         - compiles + tests on every push and pull request.
+#   * version       - resolves the semantic appVersion ONCE (before any build)
+#                     and exposes it as an output. Release events use the tag;
+#                     push/PR events use a semantic-release dry-run (falling back
+#                     to the latest tag). Every downstream job reuses this value.
+#   * build         - compiles + tests with -PappVersion=<version> on push/PR.
 #   * docker-pr     - on pull requests, builds and pushes a *test* image to the
-#                     private registry, tagged with the next semantic version
-#                     (computed via a semantic-release dry-run) plus a PR tag.
-#   * docker-release- on a published Release (created by the Semantic Versioning
-#                     workflow), builds and pushes the image tagged with the
-#                     release version and :latest.
+#                     private registry using <version> (plus a PR suffix/tag).
+#   * docker-release- on a published Release, builds and pushes the image tagged
+#                     <version> and :latest.
+#
+# The same appVersion feeds both the Gradle build and the Docker build/push, so
+# the jar manifest version and the image tag always agree.
 #
 # Required repository secrets:
 #   REGISTRY           e.g. registry.example.com  (private Docker registry host)
@@ -28,8 +33,52 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    name: Resolve appVersion
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        if: github.event_name != 'release'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install release tooling
+        if: github.event_name != 'release'
+        run: npm ci
+
+      - name: Resolve appVersion (used by gradle build and docker)
+        id: resolve
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VER="${{ github.event.release.tag_name }}"
+            VER="${VER#v}"
+          else
+            OUT=$(npx semantic-release --dry-run 2>&1 || true)
+            echo "$OUT"
+            VER=$(printf '%s\n' "$OUT" \
+              | grep -oiE 'next release version is [0-9]+\.[0-9]+\.[0-9]+' \
+              | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+            if [ -z "$VER" ]; then
+              LAST=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)
+              VER="${LAST#v}"
+            fi
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "Resolved appVersion=${VER}"
+
   build:
     name: Build & Test
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -41,52 +90,24 @@ jobs:
           java-version: '17'
 
       - name: Build and test
-        run: ./gradlew build --no-daemon --stacktrace
+        run: ./gradlew build --no-daemon --stacktrace -PappVersion=${{ needs.version.outputs.version }}
 
   docker-pr:
     name: Build & push PR test image
     if: github.event_name == 'pull_request'
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Checkout (full history for version analysis)
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v7
 
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install release tooling
-        run: npm ci
-
-      - name: Compute next version (semantic-release dry-run)
-        id: semver
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          OUT=$(npx semantic-release --dry-run 2>&1 || true)
-          echo "$OUT"
-          NEXT=$(printf '%s\n' "$OUT" \
-            | grep -oiE 'next release version is [0-9]+\.[0-9]+\.[0-9]+' \
-            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
-          echo "version=${NEXT}" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve version and image
+      - name: Resolve PR image version and ref
         id: meta
         run: |
-          NEXT="${{ steps.semver.outputs.version }}"
-          if [ -z "$NEXT" ]; then
-            LAST=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0)
-            NEXT="${LAST#v}"
-          fi
+          BASE="${{ needs.version.outputs.version }}"
           SHA=$(git rev-parse --short HEAD)
-          VERSION="${NEXT}-pr.${{ github.event.pull_request.number }}.${SHA}"
+          VERSION="${BASE}-pr.${{ github.event.pull_request.number }}.${SHA}"
           IMAGE=$(printf '%s/%s' "${{ secrets.REGISTRY }}" "${IMAGE_NAME:-${{ github.repository }}}" | tr '[:upper:]' '[:lower:]')
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
@@ -118,15 +139,15 @@ jobs:
   docker-release:
     name: Build & push release image
     if: github.event_name == 'release'
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - name: Resolve version and image
+      - name: Resolve image ref
         id: meta
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG#v}"
+          VERSION="${{ needs.version.outputs.version }}"
           IMAGE=$(printf '%s/%s' "${{ secrets.REGISTRY }}" "${IMAGE_NAME:-${{ github.repository }}}" | tr '[:upper:]' '[:lower:]')
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
