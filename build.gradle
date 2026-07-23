@@ -1,0 +1,46 @@
+plugins {
+    id 'application'
+}
+
+group = 'com.example'
+
+// The version is supplied by the semantic-versioning workflow via
+//   ./gradlew build -PappVersion=<X.Y.Z>
+// and defaults to a dev value for local builds (see gradle.properties).
+version = project.findProperty('appVersion') ?: '0.0.0-dev'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+application {
+    mainClass = 'com.example.hello.App'
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// Bake the resolved version into the jar manifest so the running app can
+// report it (App reads Package.getImplementationVersion()).
+jar {
+    manifest {
+        attributes(
+            'Implementation-Title'  : project.name,
+            'Implementation-Version': project.version,
+            'Main-Class'            : application.mainClass.get()
+        )
+    }
+}

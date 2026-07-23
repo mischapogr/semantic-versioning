@@ -1,0 +1,54 @@
+# Semantic Versioning workflow.
+#
+# On every merge/push to main (or master) this analyses the conventional-commit
+# history since the last release and, if a release is warranted, creates the
+# next Git tag (vX.Y.Z) and a published GitHub Release. The CI workflow then
+# builds and pushes the release Docker image on the resulting "release" event.
+#
+# NOTE: A Release created with the default GITHUB_TOKEN does NOT trigger other
+# workflows (GitHub prevents recursive triggering). To have this Release fire
+# the CI "docker-release" job, provide a PAT as the RELEASE_TOKEN secret (repo
+# scope). Without it the Release is still created; just push the image manually
+# or re-run CI.
+name: Semantic Versioning
+
+on:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: semantic-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for commit analysis)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          npx --yes \
+            -p semantic-release@24 \
+            -p @semantic-release/commit-analyzer \
+            -p @semantic-release/release-notes-generator \
+            -p @semantic-release/github \
+            semantic-release

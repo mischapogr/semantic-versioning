@@ -1,0 +1,16 @@
+# Gradle
+.gradle/
+build/
+
+# Keep the wrapper jar tracked (required to build without a local Gradle)
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS
+.DS_Store
