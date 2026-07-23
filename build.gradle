@@ -44,3 +44,58 @@ jar {
         )
     }
 }
+
+// --- Local Docker build & push (reuses the root Dockerfile) ---
+// Mirrors what CI does (docker/build-push-action), but from your machine.
+// Usage:
+//   ./gradlew dockerBuild -PappVersion=1.0.0
+//   docker login registry.example.com
+//   ./gradlew dockerPush  -PappVersion=1.0.0 -PdockerRegistry=registry.example.com
+// When -PappVersion is not given (or is still the dev default), the version
+// falls back to the latest git tag, so a checkout of tag v1.0.0 builds
+// hello-world:1.0.0 with no arguments.
+def dockerRegistry  = (project.findProperty('dockerRegistry')  ?: '').toString()
+def dockerImageName = (project.findProperty('dockerImageName') ?: rootProject.name).toString()
+
+def resolveDockerVersion = {
+    def v = project.findProperty('appVersion')
+    if (!v || v == '0.0.0-dev') {
+        try {
+            def tag = 'git describe --tags --abbrev=0'.execute(null, rootDir).text.trim().replaceFirst('^v', '')
+            if (tag) {
+                v = tag
+            }
+        } catch (ignored) {
+        }
+    }
+    (v ?: project.version).toString()
+}
+
+def dockerImageRef = {
+    (dockerRegistry ? "${dockerRegistry}/${dockerImageName}" : dockerImageName).toLowerCase()
+}
+
+tasks.register('dockerBuild', Exec) {
+    group = 'docker'
+    description = 'Build the Docker image tagged <version> + latest (reuses Dockerfile).'
+    doFirst {
+        def ver = resolveDockerVersion()
+        logger.lifecycle("Building ${dockerImageRef()}:${ver}")
+        commandLine 'docker', 'build',
+            '--build-arg', "VERSION=${ver}",
+            '-t', "${dockerImageRef()}:${ver}",
+            '-t', "${dockerImageRef()}:latest",
+            rootDir.absolutePath
+    }
+}
+
+tasks.register('dockerPush', Exec) {
+    group = 'docker'
+    description = 'Push <version> + latest to the registry (run `docker login` first).'
+    dependsOn 'dockerBuild'
+    doFirst {
+        def ver = resolveDockerVersion()
+        logger.lifecycle("Pushing ${dockerImageRef()}:${ver}")
+        commandLine 'sh', '-c', "docker push ${dockerImageRef()}:${ver} && docker push ${dockerImageRef()}:latest"
+    }
+}
