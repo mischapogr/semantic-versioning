@@ -72,6 +72,18 @@ git commit -m "feat: add greeting message"      # -> 1.0.0
 git commit -m "fix: correct version formatting"  # -> 1.0.1
 ```
 
+Preview the next version locally (dry-run, publishes nothing) — see
+[docs/local-usage.md](docs/local-usage.md) for Linux Mint install steps and the
+full command:
+
+```bash
+npx --yes -p semantic-release@24 \
+  -p @semantic-release/commit-analyzer -p @semantic-release/release-notes-generator \
+  semantic-release --dry-run --no-ci \
+  --branches "$(git branch --show-current)" \
+  --plugins @semantic-release/commit-analyzer @semantic-release/release-notes-generator
+```
+
 ## GitHub workflows
 
 ### `release.yml` — Semantic Versioning
